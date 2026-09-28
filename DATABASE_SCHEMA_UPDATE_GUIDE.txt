@@ -1,0 +1,47 @@
+RESTO POS - MYSQL SCHEMA DECISIONS
+=================================
+
+The original migrations create the base restaurant tables. The later
+2026_09_28_024000_align_restaurant_schema_with_application migration upgrades
+that schema for the running application and backfills existing rows. Keep the
+original migrations in place: deployed databases have already recorded them,
+and the forward migration is the upgrade path.
+
+Database
+--------
+MySQL is the default connection. Set DB_HOST, DB_PORT, DB_DATABASE,
+DB_USERNAME, and DB_PASSWORD in the deployment environment. Do not run
+migrate:fresh or rollback against production data.
+
+Users and roles
+---------------
+Laravel authentication uses users.password, email, username, and
+remember_token. The forward migration renames password_hash to password,
+creates unique usernames and emails for legacy rows, and expands roles to
+admin, manager, cashier, and chef. Legacy waiter accounts are mapped to
+cashier because that is the closest supported service role. New accounts are
+created by administrators; the app does not seed default credentials.
+
+Restaurant data
+---------------
+- categories has many menu_items; category deletion is blocked while items
+  reference it.
+- menu_items use category_id, current_price, is_available, and optional
+  description. Past order items retain their recorded unit_price.
+- dining_tables are referenced by orders through dining_table_id. A table is
+  available for deletion only when no orders reference it.
+- orders reference dining_tables and users. The forward migration adds
+  customer_name, payment_status, invoice_number, total, and paid_at, and
+  expands statuses to pending, cooking, ready, served, paid, and cancelled.
+  Legacy preparing orders become cooking. Existing totals are calculated from
+  order_items and payments mark their orders paid.
+- payments remain separate records with cash, card, or gcash as the method.
+  An order can have multiple payment rows in the schema; the POS records one
+  full payment for each order.
+- order_items store quantity and unit_price. Line totals are calculated as
+  quantity multiplied by unit_price; there is no line_total database column.
+
+Runtime tables
+--------------
+The runtime migration provides password reset tokens, sessions, database
+cache, and queue tables used by the deployment environment in .env.example.
